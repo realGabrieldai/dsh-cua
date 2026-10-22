@@ -107,6 +107,35 @@ dsh-cua selftest --json
 之所以以路径重放为主，是因为只靠命中测试不够可靠：滚动条、输入框这类覆盖层控件，
 `AXUIElementCopyElementAtPosition` 返回的往往是外层的 `AXGroup`，而不是控件本身。
 
+## 亲眼看它跑一遍
+
+```bash
+make demo        # 或者：bash scripts/demo.sh
+```
+
+它会在后台启动「文本编辑」并完整驱动一遍 —— 读辅助功能树、通过 `AXValue` 写文字、回读验证、
+截单个窗口、真实点击和按键 —— 每一步都断言最前面的 App 没有变。你可以一边干自己的活一边跑，
+焦点一次都不会动。
+
+```
+1. 权限
+   {'accessibility': True, 'screenRecording': True}
+2. 后台启动目标（open -g 不激活）
+  ✓ 最前面仍然是 DeepSeek Harness
+3. 读辅助功能树
+  AX 节点: 94 | 截断: False | 焦点未变: True
+5. 通过 Accessibility API 写文字（不模拟按键）
+  method: ax-set-value | 写入 101 字符
+7. 只截一个窗口（不是全屏）
+  png: 1172x976 | windowId: 16787 | scale: 2
+8. 真实输入：点击 + 按键
+  click   -> method: cg-event | ok: True | 焦点未变: True
+结果
+  ✓ 全程最前面的 App 一次都没变 —— 这就是重点
+
+9 passed, 0 failed
+```
+
 ## 「不抢焦点」这条保证
 
 每条命令在做任何事之前和之后都会记录当前最前面的 App。如果最前面的 App 变了，命令会报

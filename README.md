@@ -114,6 +114,36 @@ Path replay is the primary mechanism because hit-testing alone is not reliable e
 overlay controls like scrollbars and text fields, `AXUIElementCopyElementAtPosition`
 answers with the containing `AXGroup`, not the control.
 
+## See it work
+
+```bash
+make demo        # or: bash scripts/demo.sh
+```
+
+This launches TextEdit in the background and drives it — reads the accessibility tree,
+writes text through `AXValue`, verifies the text landed, screenshots one window, clicks and
+presses a key — while asserting at every step that the frontmost application has not
+changed. Run it while you are working on something else; your focus should not move once.
+
+```
+1. Permissions
+   {'accessibility': True, 'screenRecording': True}
+2. Launch the target in the BACKGROUND (open -g never activates)
+  ✓ frontmost still DeepSeek Harness
+3. Read the accessibility tree
+  AX nodes: 94 | truncated: False | frontmost unchanged: True
+5. Write text through the accessibility API (no keystrokes)
+  method: ax-set-value | chars: 101
+7. Screenshot ONE window (not the display)
+  png: 1172x976 | windowId: 16787 | scale: 2
+8. Real input: a click and a key press
+  click   -> method: cg-event | ok: True | focus unchanged: True
+Result
+  ✓ the frontmost application NEVER changed — that is the whole point
+
+9 passed, 0 failed
+```
+
 ## The no-focus-steal guarantee
 
 Every command records the frontmost application before and after it does anything. If the

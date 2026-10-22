@@ -2,7 +2,7 @@ SHELL := /bin/bash
 BIN := .build/release/dsh-cua
 SWIFT ?= swift
 
-.PHONY: all build test mcp-test lint install-skill clean
+.PHONY: all build test mcp-test lint install-skill demo clean
 
 all: build
 
@@ -25,6 +25,10 @@ lint:
 
 install-skill: build
 	bash scripts/install-skill.sh
+
+# Drives a real app in the background and asserts the frontmost app never changes.
+demo: build
+	bash scripts/demo.sh
 
 clean:
 	$(SWIFT) package clean
