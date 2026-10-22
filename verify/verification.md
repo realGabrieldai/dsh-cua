@@ -36,8 +36,8 @@ module — `swift test` cannot compile here at all. The assertions live in
 Every command in `CONTRACT.md` §1 exists and is documented in `--help`:
 
 ```
-doctor · selftest · list-apps · list-windows · get-app-state · click · type-text ·
-press-key · scroll · drag          → all present
+doctor · request-permission · selftest · list-apps · list-windows · get-app-state ·
+click · type-text · press-key · scroll · drag          → all present
 ```
 
 All 21 contract flags are documented: `--json --quiet --timeout-ms --app --screenshot
