@@ -1,0 +1,19 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# Node (the MCP server is stdlib-only; this is just belt and braces)
+node_modules/
+
+# Scratch output from manual runs
+scratch/
+*.log
+
+# macOS
+.DS_Store
