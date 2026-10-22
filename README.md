@@ -53,7 +53,14 @@ the consent is attached to **the binary**, not to your terminal:
 
 A locally built binary is unsigned, so you must add it manually with the `+` button.
 `dsh-cua doctor` prints the exact path to add and whether each permission is currently
-granted. Two gotchas: moving or rebuilding the binary can invalidate the grant (add the
+granted. To make macOS show the prompts instead of hunting through Settings, run:
+
+```bash
+dsh-cua request-permission --json
+```
+
+Note that macOS may attribute the grant to the app that *launched* this binary (the
+responsible process), so if granting the binary alone does not stick, grant that app too. Two gotchas: moving or rebuilding the binary can invalidate the grant (add the
 final path, and re-add after a clean rebuild), and without Accessibility almost every
 command returns `PERMISSION_DENIED` — which is not retryable, it means "grant it and try
 again".
@@ -64,6 +71,7 @@ Every command prints one JSON object. Add `--json` for a single compact line.
 
 ```bash
 dsh-cua doctor --json
+dsh-cua request-permission --json
 dsh-cua list-apps --json
 dsh-cua list-windows --app Safari --json
 dsh-cua get-app-state --app Safari --json                    # no capture, fast

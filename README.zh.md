@@ -49,7 +49,14 @@ macOS 不允许任何东西在没被授权的情况下驱动 App 或截窗口，
 | **屏幕录制** | 只有 `get-app-state --screenshot` 需要 | 隐私与安全性 → **屏幕与系统音频录制** |
 
 自己编出来的二进制没有签名，所以要手动点 `+` 把它加进去。`dsh-cua doctor` 会打印出该加哪个
-路径，以及当前两项权限到底有没有给。两个坑：移动或重新编译二进制可能导致授权失效（要加最终
+路径，以及当前两项权限到底有没有给。不想自己去翻系统设置的话，直接跑：
+
+```bash
+dsh-cua request-permission --json
+```
+
+注意：macOS 可能把授权算在**启动这个二进制的那个 App**（responsible process）头上，所以如果
+只授权二进制不生效，把那个 App 也一起授权。两个坑：移动或重新编译二进制可能导致授权失效（要加最终
 路径，清空重建后要重新加）；没有辅助功能权限时几乎所有命令都会返回 `PERMISSION_DENIED` ——
 这个错误重试没用，它的意思是「去授权，然后再来」。
 
@@ -59,6 +66,7 @@ macOS 不允许任何东西在没被授权的情况下驱动 App 或截窗口，
 
 ```bash
 dsh-cua doctor --json
+dsh-cua request-permission --json
 dsh-cua list-apps --json
 dsh-cua list-windows --app Safari --json
 dsh-cua get-app-state --app Safari --json                    # 不截图，很快

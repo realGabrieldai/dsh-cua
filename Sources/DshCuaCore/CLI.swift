@@ -109,6 +109,7 @@ USAGE
 
 COMMANDS
   doctor                     Report environment and macOS permissions (never fails hard)
+  request-permission         Trigger the macOS Accessibility / Screen Recording prompts
   selftest                   Run the built-in assertion suite (no XCTest needed)
   list-apps                  List running applications (frontmost first)
   list-windows               List windows, optionally for one app

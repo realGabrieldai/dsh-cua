@@ -109,6 +109,21 @@ Posts scroll wheel events to the pid. Positive `dy` scrolls down (content up). J
 ### 1.9 `drag --app <target> --from <x,y> --to <x,y> [--button left]`
 Posts mouse-down, interpolated drags (≥10 steps), mouse-up to the pid. JSON as `click`.
 
+### 1.10 `request-permission`
+Triggers the macOS permission prompts so the user does not have to hunt through System
+Settings. Accessibility via `AXIsProcessTrustedWithOptions(prompt: true)`; Screen Recording
+via `CGRequestScreenCaptureAccess()`. Always exits 0.
+```json
+{"ok":true,
+ "requested":{"accessibility":true,"screenRecording":true},
+ "permissionsNow":{"accessibility":true,"screenRecording":false},
+ "settings":{"accessibility":"System Settings → Privacy & Security → Accessibility",
+             "screenRecording":"System Settings → Privacy & Security → Screen & System Audio Recording"},
+ "note":"…"}
+```
+macOS may attribute the grant to the responsible process (the app that launched this
+binary), so the payload reports both what was requested and what is true now.
+
 ## 2. JSON envelope (every command, `--json`)
 
 Success: `{"ok":true, ...command fields...}`

@@ -26,6 +26,9 @@ Always start with `doctor`. It never fails hard and tells you whether Accessibil
 Accessibility makes almost everything return `PERMISSION_DENIED`; missing Screen
 Recording only breaks `--screenshot`.
 
+If a permission is missing, run `dsh-cua request-permission --json` to make macOS show the
+prompt. Then ask the user to approve it — never try to work around TCC.
+
 ## Workflow
 
 1. `doctor` — confirm permissions.

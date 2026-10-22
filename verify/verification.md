@@ -178,18 +178,71 @@ name **and bundle filename**, preferring `.regular` activation policy. Now resol
 Fixed; `--help` and `--version` now work with no subcommand, and a truly empty argv still
 returns `BAD_USAGE` (exit 2).
 
-## 10. Not verified — stated honestly
+## 10. Screenshot success path — 确认 (re-tested after Screen Recording was granted)
+
+An earlier revision of this report listed the capture success path as unverified, because
+Screen Recording had not been granted. It has since been granted, and the path was tested
+for real against a live window (Microsoft Edge, 1470×923 pt):
+
+```
+$ dsh-cua get-app-state --app "Microsoft Edge" --screenshot /tmp/edge-shot.png --json
+{"ok":true,
+ "screenshot":{"path":"/tmp/edge-shot.png","width":2940,"height":1846,"windowId":12643,"scale":2},
+ "frontmostApp":{...,"unchanged":true}}
+$ file /tmp/edge-shot.png
+PNG image data, 2940 x 1846, 8-bit/color RGBA, non-interlaced
+```
+
+`2940×1846` is exactly the window's `1470×923` points × the 2.0 backing scale, which is
+positive evidence that the capture is **window-scoped and not a display grab** — a
+full-screen capture of this machine would have different dimensions. The image was
+inspected and contains the real window content. The frontmost application was unchanged.
+
+## 11. `request-permission` — 确认
+
+Added so users do not have to hunt through System Settings. Exercises
+`AXIsProcessTrustedWithOptions(prompt: true)` and `CGRequestScreenCaptureAccess()`, and
+always exits 0. Run on this machine it reported
+`permissionsNow: {accessibility: true, screenRecording: false}` before the grant and
+`screenRecording: true` afterwards. Caveat: Accessibility was already granted here, so only
+the Screen Recording branch produced an actual OS prompt.
+
+## 12. CI — 确认 (green)
+
+```
+$ gh run list --limit 1
+completed  success  ci  ci  main  push  39789973227
+$ gh run view 39789973227
+✓ build-and-test in 28s
+```
+
+The first run failed in 20s:
+
+```
+error: 'dsh-cua': package 'dsh-cua' is using Swift tools version 6.0.0
+but the installed version is 5.10.0
+```
+
+`macos-14` runners ship Swift 5.10. Fixed by lowering the manifest to tools-version 5.9
+(which also gives the Swift 5 language mode this code wants) rather than pinning a newer
+runner, so the package builds on the wider toolchain range. Re-pushed as `f0801d5`.
+
+Final end-to-end acceptance, cloned from the public remote:
+
+```
+$ git clone https://github.com/realGabrieldai/dsh-cua.git /tmp/final
+$ swift build -c release                     -> Build complete! (19.68秒)
+$ ./.build/release/dsh-cua selftest --json    -> {"passed":81,"failed":0,"ok":true}
+$ node mcp/test-server.mjs                   -> 31 checks passed, 0 failed
+```
+
+## 13. Not verified — stated honestly
 
 - **No live AX press was attempted on a state-changing control.** The presses executed were
   an inert status-bar static text and a scrollbar page button. A press that mutates user
   data was deliberately avoided; the code path itself is exercised and reports
   `method=ax-press`.
-- **Screen-capture success path is untested.** Screen Recording is not granted on this
-  machine, so only the `PERMISSION_DENIED` branch of `--screenshot` was observed. The
-  ScreenCaptureKit code compiles and its permission preflight is correct, but no PNG was
-  ever produced.
 - **The focus guard's `FOCUS_CHANGED` failure branch never fired in a live run**, because
   nothing stole focus. It is covered by unit assertions on the comparison logic and by
   source inspection only.
-- **CI has never run.** `.github/workflows/ci.yml` parses (validated with a YAML parser)
-  but has not executed on a GitHub runner.
+- **No live test on a second macOS version.** Everything here is macOS 27.2 / arm64.

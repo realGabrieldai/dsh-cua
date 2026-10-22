@@ -113,6 +113,8 @@ public enum Runner {
         switch args.command {
         case "doctor":
             return try await guarded { doctor() }
+        case "request-permission":
+            return try await guarded { requestPermission() }
         case "list-apps":
             return try await guarded { listApps(args) }
         case "list-windows":
@@ -156,6 +158,44 @@ public enum Runner {
             ])),
             ("screenRecordingApi", .s("SCScreenshotManager")),
             ("dryRun", .b(Safety.dryRun)),
+        ])
+    }
+
+    /// Triggers the macOS permission prompts instead of making the user hunt through
+    /// System Settings. Accessibility uses `AXIsProcessTrustedWithOptions(prompt: true)`;
+    /// Screen Recording uses `CGRequestScreenCaptureAccess()`.
+    ///
+    /// Note for users: macOS attributes the grant to the *responsible process*, so if this
+    /// binary was launched by a host app, granting that host is usually what actually
+    /// sticks. That is why the payload reports both what was requested and what is true now.
+    static func requestPermission() -> J {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let trustedNow = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+
+        let screenAlready = Capture.hasPermission
+        if !screenAlready {
+            Capture.requestPermission()
+        }
+
+        return .obj([
+            ("ok", .b(true)),
+            ("requested", .obj([
+                ("accessibility", .b(true)),
+                ("screenRecording", .b(!screenAlready)),
+            ])),
+            ("permissionsNow", .obj([
+                ("accessibility", .b(trustedNow)),
+                ("screenRecording", .b(Capture.hasPermission)),
+            ])),
+            ("settings", .obj([
+                ("accessibility", .s("System Settings → Privacy & Security → Accessibility")),
+                ("screenRecording", .s("System Settings → Privacy & Security → Screen & System Audio Recording")),
+            ])),
+            ("note", .s(
+                "If no dialog appeared, the permission was already decided; toggle it manually in the "
+                    + "System Settings pane above. macOS may attribute the grant to the app that launched "
+                    + "this binary, so grant that app too if the binary itself does not stick."
+            )),
         ])
     }
 
