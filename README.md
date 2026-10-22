@@ -94,6 +94,18 @@ Illustrative output (contract shape; real values differ):
 macOS the display name may be Chinese — the resolver also matches the bundle filename, so
 `--app Finder` finds `访达` rather than some unrelated "… Finder Extension".
 
+## Element refs
+
+`get-app-state` assigns `e1`, `e2`, … to every node that has a frame, and caches them per
+pid. A ref is valid **until the next `get-app-state` for that app**. Refs are not live
+handles: the CLI replays the recorded child-index path (falling back to a hit test) and
+verifies role and title still match. If the UI moved you get `STALE_REF` (exit 5) — re-read
+the state and use the new ref instead of guessing.
+
+Path replay is the primary mechanism because hit-testing alone is not reliable enough: for
+overlay controls like scrollbars and text fields, `AXUIElementCopyElementAtPosition`
+answers with the containing `AXGroup`, not the control.
+
 ## The no-focus-steal guarantee
 
 Every command records the frontmost application before and after it does anything. If the

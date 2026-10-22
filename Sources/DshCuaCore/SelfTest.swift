@@ -203,6 +203,17 @@ public enum SelfTest {
         let noPid2 = FrontmostSnapshot(bundleId: "com.apple.Safari", pid: nil, name: "Safari")
         h.expect(noPid1.sameFocus(as: noPid2), "focus: falls back to bundle id without a pid")
 
+        // ---- Element ref re-resolution ----
+        // Path-walk is the primary mechanism; hit-testing alone is not enough because
+        // AXUIElementCopyElementAtPosition answers with the container for overlay controls.
+        h.expect(AXTree.rolesCompatible("AXButton", "AXButton"), "ref: same role is compatible")
+        h.expect(!AXTree.rolesCompatible("AXButton", "AXGroup"), "ref: changed role is not compatible")
+        h.expect(AXTree.rolesCompatible(nil, "AXGroup"), "ref: unknown expected role is accepted")
+        h.expect(!AXTree.rolesCompatible("AXButton", nil), "ref: missing live role is rejected")
+        h.expect(AXTree.titlesCompatible(nil, "anything"), "ref: unknown expected title is accepted")
+        h.expect(AXTree.titlesCompatible("Open", "Open"), "ref: same title is compatible")
+        h.expect(!AXTree.titlesCompatible("Open", "Close"), "ref: changed title is not compatible")
+
         // ---- doctor shape (must hold with or without TCC permissions) ----
         if case .o(let pairs) = Runner.doctor() {
             let keys = Set(pairs.map { $0.0 })

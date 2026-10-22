@@ -59,10 +59,25 @@ under the point.
 
 `AXUIElement` references go invalid the moment an app redraws, and they cannot be shared
 between processes. So refs are deliberately *soft*: the snapshot on disk stores
-`{ref, role, title, cx, cy, pid}` in `~/.cache/dsh-cua/snapshot-<pid>.json`, and every use
-re-resolves through a hit test with verification. A ref is valid until the next
-`get-app-state` for that pid. This trades a little speed for the property that matters:
-a stale ref produces an error, never a wrong click.
+`{ref, role, title, cx, cy, pid, path}` in `~/.cache/dsh-cua/snapshot-<pid>.json`, and
+every use re-resolves against the live UI with verification. A ref is valid until the next
+`get-app-state` for that pid.
+
+Re-resolution tries two mechanisms in order:
+
+1. **Path walk** (primary). The snapshot records the child-index path from the app's window
+   array, e.g. `[0, 3, 2]`. Replaying it finds the element again across most redraws.
+2. **Hit test** (fallback). `AXUIElementCopyElementAtPosition` at the remembered centre.
+
+The path walk exists because hit-testing alone is genuinely unreliable: for overlay
+controls such as scrollbars and text fields, the hit test answers with the containing
+`AXGroup` rather than the control. An earlier version used hit-testing only, and every
+scrollbar and text-field ref came back `STALE_REF` — the verification was correct but the
+resolution was too weak. Either mechanism must still agree on role and title, so a moved
+UI yields `STALE_REF` (exit 5) rather than a click on the wrong control.
+
+This trades a little speed for the property that matters: a stale ref produces an error,
+never a wrong click.
 
 ## Focus preservation
 

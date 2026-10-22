@@ -154,6 +154,11 @@ public struct SnapshotEntry: Codable {
     public let cx: Double
     public let cy: Double
     public let pid: pid_t
+    /// Child-index path from the app's window array, e.g. [0, 3, 2] = windows[0] -> child 3 -> child 2.
+    /// This is the primary re-resolution mechanism; hit-testing alone is not enough because
+    /// `AXUIElementCopyElementAtPosition` returns the *container* for overlay controls
+    /// (scrollbars, text fields), which would make every such ref look stale.
+    public let path: [Int]
 }
 
 public enum AXTree {
@@ -181,7 +186,7 @@ public enum AXTree {
         var deepest = 0
         var index: [String: SnapshotEntry] = [:]
 
-        func build(_ element: AXUIElement, depth: Int) -> AXNode? {
+        func build(_ element: AXUIElement, depth: Int, path: [Int]) -> AXNode? {
             if counter >= maxNodes {
                 truncated = true
                 return nil
@@ -208,15 +213,19 @@ public enum AXTree {
                     ref: ref, role: role, title: title,
                     cx: pos.x + Double(size.width) / 2,
                     cy: pos.y + Double(size.height) / 2,
-                    pid: pid
+                    pid: pid,
+                    path: path
                 )
             }
 
             var kids: [AXNode] = []
             if depth < maxDepth {
-                for child in AX.children(element) {
+                let childElements = AX.children(element)
+                for (childIndex, child) in childElements.enumerated() {
                     if counter >= maxNodes { truncated = true; break }
-                    if let node = build(child, depth: depth + 1) { kids.append(node) }
+                    if let node = build(child, depth: depth + 1, path: path + [childIndex]) {
+                        kids.append(node)
+                    }
                 }
             } else if !AX.children(element).isEmpty {
                 truncated = true
@@ -235,14 +244,14 @@ public enum AXTree {
             windowElements = [focusedWindow as! AXUIElement]
         }
         if windowElements.isEmpty {
-            for child in AX.children(app) {
+            for (childIndex, child) in AX.children(app).enumerated() {
                 if counter >= maxNodes { truncated = true; break }
-                if let node = build(child, depth: 1) { roots.append(node) }
+                if let node = build(child, depth: 1, path: [childIndex]) { roots.append(node) }
             }
         } else {
-            for window in windowElements {
+            for (windowIndex, window) in windowElements.enumerated() {
                 if counter >= maxNodes { truncated = true; break }
-                if let node = build(window, depth: 0) { roots.append(node) }
+                if let node = build(window, depth: 0, path: [windowIndex]) { roots.append(node) }
             }
         }
 
@@ -279,9 +288,17 @@ public enum AXTree {
     /// Re-resolves a ref from the last snapshot into a live element.
     ///
     /// We deliberately do not cache AXUIElement references across processes: they go
-    /// invalid whenever the app redraws. Instead we remember where the element was and
-    /// hit-test that point again, then verify role and title still match. A mismatch is
-    /// a STALE_REF, never a blind click.
+    /// invalid whenever the app redraws. Two mechanisms, in order:
+    ///
+    /// 1. **Path walk** — replay the recorded child-index path from the app's window array.
+    ///    This is the reliable one, and the reason it exists is that hit-testing is not
+    ///    reliable: `AXUIElementCopyElementAtPosition` answers with the containing
+    ///    `AXGroup` for overlay controls such as scrollbars and text fields.
+    /// 2. **Hit test** — fall back to the remembered centre point, which still works for
+    ///    plain leaf elements.
+    ///
+    /// Either way the live role and title must still match, so a moved UI yields
+    /// `STALE_REF` rather than a click on the wrong control.
     public static func resolve(ref: String, pid: pid_t) throws -> (element: AXUIElement, entry: SnapshotEntry, method: String) {
         let snapshot = loadSnapshot(pid: pid)
         guard let entry = snapshot[ref] else {
@@ -291,30 +308,58 @@ public enum AXTree {
                 detail: ["hint": "run get-app-state again; refs are only valid until the next snapshot"]
             )
         }
+
         let app = AXUIElementCreateApplication(pid)
-        guard let hit = AX.element(at: CGPointLike(x: entry.cx, y: entry.cy), in: app) else {
-            throw CuaError(
-                .staleRef,
-                "nothing is under the remembered position of '\(ref)' any more",
-                detail: ["ref": ref, "x": entry.cx, "y": entry.cy]
-            )
+
+        if let element = resolveByPath(entry.path, app: app, entry: entry) {
+            return (element, entry, "ax-path")
         }
-        let liveRole = AX.string(hit, kAXRoleAttribute as String)
-        let liveTitle = AX.string(hit, kAXTitleAttribute as String)
-        if let expected = entry.role, let live = liveRole, expected != live {
-            throw CuaError(
-                .staleRef,
-                "element '\(ref)' changed role (\(expected) -> \(live)); the UI moved",
-                detail: ["ref": ref, "expectedRole": expected, "liveRole": live]
-            )
+
+        var mismatch = "the element could not be found again"
+        if let hit = AX.element(at: CGPointLike(x: entry.cx, y: entry.cy), in: app) {
+            let liveRole = AX.string(hit, kAXRoleAttribute as String)
+            let liveTitle = AX.string(hit, kAXTitleAttribute as String)
+            if rolesCompatible(entry.role, liveRole), titlesCompatible(entry.title, liveTitle) {
+                return (hit, entry, "ax-hit-test")
+            }
+            mismatch = "the control at that position changed "
+                + "(role \(entry.role ?? "?") -> \(liveRole ?? "?"))"
         }
-        if let expected = entry.title, let live = liveTitle, expected != live {
-            throw CuaError(
-                .staleRef,
-                "element '\(ref)' changed title; the UI moved",
-                detail: ["ref": ref, "expectedTitle": expected, "liveTitle": live]
-            )
+
+        throw CuaError(
+            .staleRef,
+            "element '\(ref)' is no longer where it was: \(mismatch)",
+            detail: ["ref": ref, "expectedRole": entry.role ?? "?", "path": entry.path.map(String.init).joined(separator: "/")]
+        )
+    }
+
+    /// Walks `path` (window index, then child indices) and checks the result still matches.
+    static func resolveByPath(_ path: [Int], app: AXUIElement, entry: SnapshotEntry) -> AXUIElement? {
+        guard let windowIndex = path.first else { return nil }
+        let windows = (AX.copy(app, kAXWindowsAttribute as String) as? [AXUIElement]) ?? []
+        guard windowIndex < windows.count else { return nil }
+
+        var current = windows[windowIndex]
+        for childIndex in path.dropFirst() {
+            let children = AX.children(current)
+            guard childIndex < children.count else { return nil }
+            current = children[childIndex]
         }
-        return (hit, entry, "ax-hit-test")
+
+        guard rolesCompatible(entry.role, AX.string(current, kAXRoleAttribute as String)) else { return nil }
+        guard titlesCompatible(entry.title, AX.string(current, kAXTitleAttribute as String)) else { return nil }
+        return current
+    }
+
+    /// `nil` on either side means "unknown", which we accept; otherwise it must be equal.
+    static func rolesCompatible(_ expected: String?, _ live: String?) -> Bool {
+        guard let expected else { return true }
+        guard let live else { return false }
+        return expected == live
+    }
+
+    static func titlesCompatible(_ expected: String?, _ live: String?) -> Bool {
+        guard let expected else { return true }
+        return expected == live
     }
 }

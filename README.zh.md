@@ -89,6 +89,16 @@ dsh-cua selftest --json
 可能是中文，解析器同时会匹配 bundle 的文件名，所以 `--app Finder` 能找到「访达」，而不会
 匹配到某个名字里带 Finder 的扩展。
 
+## 元素 ref 怎么用
+
+`get-app-state` 会给每个有 frame 的节点分配 `e1`、`e2`……，并按 pid 缓存。一个 ref 的有效期
+**到该 App 下一次 `get-app-state` 为止**。ref 不是活句柄：CLI 会重放记录下来的子节点索引路径
+（退而求其次才用命中测试），并核对 role 和 title 是否仍然一致。UI 挪动过就会返回 `STALE_REF`
+（退出码 5）—— 重新读一次状态、用新的 ref，不要猜。
+
+之所以以路径重放为主，是因为只靠命中测试不够可靠：滚动条、输入框这类覆盖层控件，
+`AXUIElementCopyElementAtPosition` 返回的往往是外层的 `AXGroup`，而不是控件本身。
+
 ## 「不抢焦点」这条保证
 
 每条命令在做任何事之前和之后都会记录当前最前面的 App。如果最前面的 App 变了，命令会报

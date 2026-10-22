@@ -59,9 +59,9 @@ bundle filename, so `Finder` finds `访达`.
 
 `get-app-state` assigns `e1`, `e2`, … to every node that has a frame, and caches them per
 pid. A ref is valid **until the next `get-app-state` for that app**. Refs are not live
-handles: the CLI re-hit-tests the remembered point and verifies role and title still
-match. If the UI moved you get `STALE_REF` (exit 5) — re-read the state and use the new
-ref instead of guessing.
+handles: the CLI replays the recorded child-index path (falling back to a hit test) and
+verifies role and title still match. If the UI moved you get `STALE_REF` (exit 5) — re-read
+the state and use the new ref instead of guessing.
 
 ## Safety
 
