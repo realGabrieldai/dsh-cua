@@ -82,7 +82,9 @@ public enum Runner {
         var payload = try await body()
         let after = FrontmostSnapshot.capture()
 
-        if !before.sameFocus(as: after) {
+        // focusChangeRequested is only ever set by an explicit --activate, in which case the
+        // caller asked for the change; failing here would hide the one fact they need.
+        if !before.sameFocus(as: after), !FocusGuard.focusChangeRequested {
             throw CuaError(
                 .focusChanged,
                 "the frontmost application changed during the command "
@@ -96,6 +98,10 @@ public enum Runner {
         }
 
         if case .o(var pairs) = payload {
+            if FocusGuard.focusChangeRequested {
+                pairs.append(("activated", .b(true)))
+                pairs.append(("focusChanged", .b(!before.sameFocus(as: after))))
+            }
             pairs.append(("frontmostApp", .obj([
                 ("bundleId", .opt(after.bundleId)),
                 ("pid", after.pid.map { J.i(Int($0)) } ?? .n),
@@ -288,6 +294,7 @@ public enum Runner {
     static func click(_ args: Args) throws -> J {
         let app = try Apps.resolve(try args.require("app"))
         try Safety.assertInputAllowed(bundleId: app.bundleId, appName: app.name)
+        _ = try Safety.activateIfRequested(pid: app.pid, args: args)
         let button = try Input.mouseButton(args.str("button") ?? "left")
         let count = try args.int("count", default: 1)
 
@@ -311,7 +318,20 @@ public enum Runner {
                 ("title", .opt(title)),
                 ("resolution", .s(resolved.method)),
             ])
-            if actions.contains(kAXPressAction as String) {
+            if let action = args.str("action") {
+                // Arbitrary named AX action: this is how you drive things that have no
+                // press — scroll areas (AXScrollDownByPage), expanders, tabs, etc.
+                let available = AX.actions(resolved.element)
+                guard available.contains(action) else {
+                    throw CuaError(
+                        .unsupported,
+                        "element '\\(ref)' does not support action '\\(action)'",
+                        detail: ["available": available.joined(separator: ", ")]
+                    )
+                }
+                method = "ax-action:\(action)"
+                if !Safety.dryRun { try AX.perform(resolved.element, action) }
+            } else if actions.contains(kAXPressAction as String) {
                 method = "ax-press"
                 if !Safety.dryRun { try AX.perform(resolved.element, kAXPressAction as String) }
             } else if AX.isSettable(resolved.element, kAXValueAttribute as String) {
@@ -357,10 +377,17 @@ public enum Runner {
     static func typeText(_ args: Args) throws -> J {
         let app = try Apps.resolve(try args.require("app"))
         try Safety.assertInputAllowed(bundleId: app.bundleId, appName: app.name)
+        _ = try Safety.activateIfRequested(pid: app.pid, args: args)
         let text = try args.require("text")
+        // Some controls are settable but only react to real typing. A search field that
+        // filters as you type is the classic case: assigning AXValue updates the text but
+        // the app never runs its search path, so the results silently do not change.
+        // `--keystrokes` forces the event route.
+        let forceKeystrokes = args.flag("keystrokes")
 
         var method = "cg-event"
         var target: J = .n
+        var focused = false
 
         if let ref = args.str("element") {
             let resolved = try AXTree.resolve(ref: ref, pid: app.pid)
@@ -371,18 +398,38 @@ public enum Runner {
                 ("role", .opt(role)),
                 ("title", .opt(AX.string(resolved.element, kAXTitleAttribute as String))),
             ])
-            if AX.isSettable(resolved.element, kAXValueAttribute as String) {
+            if !forceKeystrokes, AX.isSettable(resolved.element, kAXValueAttribute as String) {
                 method = "ax-set-value"
                 if !Safety.dryRun { try AX.setValue(resolved.element, text) }
             } else if !Safety.dryRun {
+                // Key events only reach the key window's first responder, so ask the
+                // accessibility API to focus the control first. It often works where a
+                // posted click does not, and it never moves the user's cursor.
+                focused = AX.setFocused(resolved.element)
                 try Input.typeText(text, to: app.pid)
             }
         } else if !Safety.dryRun {
             try Input.typeText(text, to: app.pid)
         }
 
+        // "Submit" should commit the field, and the accessibility action for that is
+        // AXConfirm — which works without the app being frontmost. A Return keystroke only
+        // reaches the field when the app is active and the field holds first responder, so
+        // it is the fallback, not the default.
+        var submitMethod = "none"
         if args.flag("submit"), !Safety.dryRun {
-            try Input.tapKey("return", modifiers: [], to: app.pid)
+            var confirmed = false
+            if let ref = args.str("element"),
+               let resolved = try? AXTree.resolve(ref: ref, pid: app.pid),
+               AX.actions(resolved.element).contains(kAXConfirmAction as String) {
+                try AX.perform(resolved.element, kAXConfirmAction as String)
+                submitMethod = "ax-confirm"
+                confirmed = true
+            }
+            if !confirmed {
+                try Input.tapKey("return", modifiers: [], to: app.pid)
+                submitMethod = "cg-event-return"
+            }
         }
 
         return .obj([
@@ -391,6 +438,8 @@ public enum Runner {
             ("target", target),
             ("method", .s(method)),
             ("chars", .i(text.count)),
+            ("axFocused", .b(focused)),
+            ("submitMethod", .s(submitMethod)),
             ("dryRun", .b(Safety.dryRun)),
         ])
     }
@@ -398,6 +447,7 @@ public enum Runner {
     static func pressKey(_ args: Args) throws -> J {
         let app = try Apps.resolve(try args.require("app"))
         try Safety.assertInputAllowed(bundleId: app.bundleId, appName: app.name)
+        _ = try Safety.activateIfRequested(pid: app.pid, args: args)
         let key = try args.require("key")
         let modifiers = try Input.modifierFlags(
             for: (args.str("modifiers") ?? "").split(separator: ",").map(String.init)

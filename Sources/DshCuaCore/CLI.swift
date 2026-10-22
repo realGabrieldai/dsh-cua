@@ -11,7 +11,7 @@ public struct Args {
     /// Options that take no value. Everything else of the form `--name` consumes the
     /// next token as its value, or uses `--name=value`.
     static let booleanFlags: Set<String> = [
-        "json", "quiet", "help", "h", "submit", "all", "version",
+        "json", "quiet", "help", "h", "submit", "all", "version", "keystrokes", "activate",
     ]
 
     public init(_ argv: [String]) throws {
@@ -142,12 +142,18 @@ click
   --x <n> --y <n>            Global display coordinates (top-left origin)
   --button left|right|middle  (default left)
   --count <n>                Click count (default 1)
+  --action <AXActionName>    Perform this accessibility action instead of pressing,
+                             e.g. AXScrollDownByPage, AXExpand, AXShowMenu.
 
 type-text
   --app <target>             Required
   --text <string>            Required
   --element <ref>            Set this element's AXValue directly (no focus change)
-  --submit                   Post Return afterwards
+  --keystrokes               Force real key events even when AXValue is settable.
+                             Needed for controls that only react to typing, such as a
+                             search field that filters as you type.
+  --submit                   Commit the field: uses its AXConfirm action when it has one
+                             (works while the app stays in the background), else Return
 
 press-key
   --app <target> --key <name> [--modifiers cmd,shift,opt,ctrl]
@@ -160,6 +166,11 @@ drag
 
 ENVIRONMENT
   DSH_CUA_BIN                Override binary path (used by the MCP server)
+  DSH_CUA_ALLOW_ACTIVATE=1   Required for --activate. Typing into a background app and
+                             scroll actions need the app to be the active window; --activate
+                             brings it forward and reports activated/focusChanged instead of
+                             failing with FOCUS_CHANGED. Off by default: stealing focus is
+                             the thing this tool exists to avoid.
   DSH_CUA_DRY_RUN=1          Resolve the plan but perform no input
   DSH_CUA_ALLOW_BLOCKED=1    Override the terminal/security-agent blocklist (dangerous)
 

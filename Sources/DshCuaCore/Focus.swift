@@ -47,6 +47,11 @@ public struct FrontmostSnapshot {
 
 /// Wraps a command body so that focus is verified no matter which exit path is taken.
 public enum FocusGuard {
+    /// Set only by an explicit, opt-in activation (`--activate` + DSH_CUA_ALLOW_ACTIVATE=1).
+    /// It downgrades FOCUS_CHANGED from a hard failure to a reported fact, because at that
+    /// point the user asked for the focus change and hiding it would be the real bug.
+    public static var focusChangeRequested = false
+
     /// Runs `body`, then verifies the frontmost application did not change.
     /// On a change the caller gets a `FOCUS_CHANGED` error and exit code 7.
     public static func run(
@@ -57,7 +62,7 @@ public enum FocusGuard {
         var payload = try body()
         let after = FrontmostSnapshot.capture()
 
-        if !before.sameFocus(as: after) {
+        if !before.sameFocus(as: after), !focusChangeRequested {
             throw CuaError(
                 .focusChanged,
                 "the frontmost application changed during the command "
@@ -72,6 +77,10 @@ public enum FocusGuard {
 
         // Attach the frontmost-app report to every successful payload.
         if case .o(var pairs) = payload {
+            if focusChangeRequested {
+                pairs.append(("activated", .b(true)))
+                pairs.append(("focusChanged", .b(!before.sameFocus(as: after))))
+            }
             pairs.append(("frontmostApp", .obj([
                 ("bundleId", .opt(after.bundleId)),
                 ("pid", after.pid.map { J.i(Int($0)) } ?? .n),

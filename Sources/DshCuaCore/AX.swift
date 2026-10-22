@@ -75,6 +75,20 @@ public enum AX {
         return list
     }
 
+    /// Gives an element keyboard focus through the accessibility API.
+    ///
+    /// This is worth trying before posting keystrokes: macOS only routes key events to the
+    /// key window's first responder, so a background app normally cannot be typed into.
+    /// Setting AXFocused sometimes works where a posted click does not, and it never moves
+    /// the user's cursor.
+    @discardableResult
+    public static func setFocused(_ element: AXUIElement) -> Bool {
+        let err = AXUIElementSetAttributeValue(
+            element, kAXFocusedAttribute as CFString, kCFBooleanTrue
+        )
+        return err == .success
+    }
+
     public static func isSettable(_ element: AXUIElement, _ attribute: String) -> Bool {
         var settable: DarwinBoolean = false
         let err = AXUIElementIsAttributeSettable(element, attribute as CFString, &settable)

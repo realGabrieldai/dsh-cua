@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Refuse to drive things that can hurt the user, mirroring the safety posture of
@@ -23,6 +24,32 @@ public enum Safety {
 
     public static var dryRun: Bool {
         ProcessInfo.processInfo.environment["DSH_CUA_DRY_RUN"] == "1"
+    }
+
+    /// Brings the target app forward — the one thing this tool otherwise refuses to do.
+    ///
+    /// Some interactions genuinely require the app to be the active window: typing into a
+    /// field (macOS only routes keystrokes to the key window's first responder) and scroll
+    /// actions are the two we hit. Rather than pretend, this is gated behind an explicit
+    /// flag AND an environment variable, and the payload reports `activated`/`focusChanged`
+    /// so the caller can see exactly what happened.
+    public static func activateIfRequested(pid: pid_t, args: Args) throws -> Bool {
+        guard args.flag("activate") else { return false }
+        guard ProcessInfo.processInfo.environment["DSH_CUA_ALLOW_ACTIVATE"] == "1" else {
+            throw CuaError(
+                .unsupported,
+                "--activate requires DSH_CUA_ALLOW_ACTIVATE=1; it deliberately steals focus",
+                detail: ["hint": "export DSH_CUA_ALLOW_ACTIVATE=1 to opt in"]
+            )
+        }
+        guard let running = NSRunningApplication(processIdentifier: pid) else {
+            throw CuaError(.appNotFound, "no running application with pid \(pid)")
+        }
+        running.activate(options: [])
+        FocusGuard.focusChangeRequested = true
+        // Give the window server a moment to hand over the key window.
+        Thread.sleep(forTimeInterval: 0.5)
+        return true
     }
 
     /// Throws unless the target may receive input.

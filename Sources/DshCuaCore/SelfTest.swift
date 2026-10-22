@@ -106,6 +106,18 @@ public enum SelfTest {
             h.expectThrows("args: malformed point", .badUsage) { _ = try args.point("from") }
         }
 
+        // ---- Flags added while driving a real app (Apple Music) ----
+        if let a = try? Args(["click", "--app", "Music", "--activate"]) {
+            h.expect(a.flag("activate"), "args: --activate is a boolean flag")
+        } else { h.failures.append("args: --activate failed to parse") }
+        if let a = try? Args(["type-text", "--app", "M", "--text", "x", "--keystrokes"]) {
+            h.expect(a.flag("keystrokes"), "args: --keystrokes is a boolean flag")
+        } else { h.failures.append("args: --keystrokes failed to parse") }
+        if let a = try? Args(["click", "--app", "M", "--element", "e3", "--action", "AXScrollDownByPage"]) {
+            h.expectEqual(a.str("action"), "AXScrollDownByPage", "args: --action takes a value")
+            h.expectEqual(a.str("element"), "e3", "args: --action does not swallow --element")
+        } else { h.failures.append("args: --action failed to parse") }
+
         // ---- Keycodes / modifiers ----
         h.expectEqual(Input.keycode(for: "return"), 36, "keycode return")
         h.expectEqual(Input.keycode(for: "space"), 49, "keycode space")
