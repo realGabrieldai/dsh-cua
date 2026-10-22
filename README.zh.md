@@ -31,7 +31,7 @@ Chrome 窗口，结果每一步 Chrome 都跳到最前面，把用户从手头�
 
 ```bash
 git clone <本仓库> && cd dsh-cua
-swift build -c release          # 需要 macOS 14+ 和 Swift 6 工具链
+swift build -c release          # 需要 macOS 14+ 和 Swift 5.9+ 工具链（5.10 和 6.x 都能编）
 ./.build/release/dsh-cua doctor --json
 bash scripts/install-skill.sh   # 装 DSH skill
 ```

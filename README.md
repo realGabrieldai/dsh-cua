@@ -34,7 +34,7 @@ is a fast macOS action layer for computer-use agents.
 
 ```bash
 git clone <this repo> && cd dsh-cua
-swift build -c release          # macOS 14+, Swift 6 toolchain
+swift build -c release          # macOS 14+, Swift 5.9+ toolchain (builds on 5.10 and 6.x)
 ./.build/release/dsh-cua doctor --json
 bash scripts/install-skill.sh   # installs the DSH skill
 ```
